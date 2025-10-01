@@ -183,8 +183,8 @@ impl Backend {
     ///
     /// * `device` - The IQM device the Backend uses to execute operations and circuits.
     /// * `access_token` - An access_token is required to access IQM hardware and simulators. The
-    ///                    access_token can either be passed as an argument, or if the argument is set to None will be
-    ///                    read from the environmental variable `IQM_TOKEN`.
+    ///   access_token can either be passed as an argument, or if the argument is set to None will be
+    ///   read from the environmental variable `IQM_TOKEN`.
     ///
     /// # Returns
     ///

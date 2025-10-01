@@ -4,6 +4,13 @@ This changelog tracks changes to the qoqo_iqm project starting at version 0.1.0.
 
 ## Not released
 
+## 0.11.0
+
+* Updated minimum supported Python version to 3.10.
+* Updated to pyo3 0.25.
+* Updated to qoqo 1.21 and qoqo_calculator 1.7.
+
+
 ## 0.10.2
 
 * Use pyo3 Bound

@@ -24,12 +24,12 @@ fn test_creating_backend_deneb_device() {
     // Test if Backend is created successfully with a dummy access token
     Python::with_gil(|py| {
         // get Python type (i.e. Python class) corresponding to DenebDeviceWrapper Rust type
-        let device_type = py.get_type_bound::<devices::DenebDeviceWrapper>();
+        let device_type = py.get_type::<devices::DenebDeviceWrapper>();
         let device = device_type
             // Instantiate Python class
             .call0()
             .unwrap();
-        let backend_type = py.get_type_bound::<BackendWrapper>();
+        let backend_type = py.get_type::<BackendWrapper>();
         let _backend = backend_type
             .call1((
                 device.downcast::<devices::DenebDeviceWrapper>().unwrap(),
@@ -43,9 +43,9 @@ fn test_creating_backend_deneb_device() {
     if env::var("IQM_TOKEN").is_ok() {
         // Test if Backend correctly retrieves access token from environment variable
         Python::with_gil(|py| {
-            let device_type = py.get_type_bound::<devices::DenebDeviceWrapper>();
+            let device_type = py.get_type::<devices::DenebDeviceWrapper>();
             let device = device_type.call0().unwrap();
-            let backend_type = py.get_type_bound::<BackendWrapper>();
+            let backend_type = py.get_type::<BackendWrapper>();
             let _backend = backend_type
                 .call1((device.downcast::<devices::DenebDeviceWrapper>().unwrap(),))
                 .unwrap()
@@ -56,9 +56,9 @@ fn test_creating_backend_deneb_device() {
         // If the environment variable IQM_TOKEN is not set and an access token is not provided,
         // creation of the Backend should fail
         Python::with_gil(|py| {
-            let device_type = py.get_type_bound::<devices::DenebDeviceWrapper>();
+            let device_type = py.get_type::<devices::DenebDeviceWrapper>();
             let device = device_type.call0().unwrap();
-            let backend_type = py.get_type_bound::<BackendWrapper>();
+            let backend_type = py.get_type::<BackendWrapper>();
             let backend =
                 backend_type.call1((device.downcast::<devices::DenebDeviceWrapper>().unwrap(),));
             match backend {
@@ -77,12 +77,12 @@ fn test_creating_backend_resonator_free_device() {
     // Test if Backend is created successfully with a dummy access token
     Python::with_gil(|py| {
         // get Python type (i.e. Python class) corresponding to ResonatorFreeDeviceWrapper Rust type
-        let device_type = py.get_type_bound::<devices::ResonatorFreeDeviceWrapper>();
+        let device_type = py.get_type::<devices::ResonatorFreeDeviceWrapper>();
         let device = device_type
             // Instantiate Python class
             .call0()
             .unwrap();
-        let backend_type = py.get_type_bound::<BackendWrapper>();
+        let backend_type = py.get_type::<BackendWrapper>();
         let _backend = backend_type
             .call1((
                 device
@@ -98,9 +98,9 @@ fn test_creating_backend_resonator_free_device() {
     if env::var("IQM_TOKEN").is_ok() {
         // Test if Backend correctly retrieves access token from environment variable
         Python::with_gil(|py| {
-            let device_type = py.get_type_bound::<devices::ResonatorFreeDeviceWrapper>();
+            let device_type = py.get_type::<devices::ResonatorFreeDeviceWrapper>();
             let device = device_type.call0().unwrap();
-            let backend_type = py.get_type_bound::<BackendWrapper>();
+            let backend_type = py.get_type::<BackendWrapper>();
             let _backend = backend_type
                 .call1((device
                     .downcast::<devices::ResonatorFreeDeviceWrapper>()
@@ -113,9 +113,9 @@ fn test_creating_backend_resonator_free_device() {
         // If the environment variable IQM_TOKEN is not set and an access token is not provided,
         // creation of the Backend should fail
         Python::with_gil(|py| {
-            let device_type = py.get_type_bound::<devices::ResonatorFreeDeviceWrapper>();
+            let device_type = py.get_type::<devices::ResonatorFreeDeviceWrapper>();
             let device = device_type.call0().unwrap();
-            let backend_type = py.get_type_bound::<BackendWrapper>();
+            let backend_type = py.get_type::<BackendWrapper>();
             let backend = backend_type.call1((device
                 .downcast::<devices::ResonatorFreeDeviceWrapper>()
                 .unwrap(),));
@@ -134,12 +134,12 @@ fn test_creating_backend_garnet_device() {
 
     // Test if Backend is created successfully with a dummy access token
     Python::with_gil(|py| {
-        let device_type = py.get_type_bound::<devices::GarnetDeviceWrapper>();
+        let device_type = py.get_type::<devices::GarnetDeviceWrapper>();
         let device = device_type
             // Instantiate Python class
             .call0()
             .unwrap();
-        let backend_type = py.get_type_bound::<BackendWrapper>();
+        let backend_type = py.get_type::<BackendWrapper>();
         let _backend = backend_type
             .call1((
                 device.downcast::<devices::GarnetDeviceWrapper>().unwrap(),
@@ -153,9 +153,9 @@ fn test_creating_backend_garnet_device() {
     if env::var("IQM_TOKEN").is_ok() {
         // Test if Backend correctly retrieves access token from environment variable
         Python::with_gil(|py| {
-            let device_type = py.get_type_bound::<devices::GarnetDeviceWrapper>();
+            let device_type = py.get_type::<devices::GarnetDeviceWrapper>();
             let device = device_type.call0().unwrap();
-            let backend_type = py.get_type_bound::<BackendWrapper>();
+            let backend_type = py.get_type::<BackendWrapper>();
             let _backend = backend_type
                 .call1((device.downcast::<devices::GarnetDeviceWrapper>().unwrap(),))
                 .unwrap()
@@ -165,9 +165,9 @@ fn test_creating_backend_garnet_device() {
     } else {
         // If the environment variable IQM_TOKEN is not set and an access token is not provided, creation of the Backend should fail
         Python::with_gil(|py| {
-            let device_type = py.get_type_bound::<devices::GarnetDeviceWrapper>();
+            let device_type = py.get_type::<devices::GarnetDeviceWrapper>();
             let device = device_type.call0().unwrap();
-            let backend_type = py.get_type_bound::<BackendWrapper>();
+            let backend_type = py.get_type::<BackendWrapper>();
             let backend =
                 backend_type.call1((device.downcast::<devices::GarnetDeviceWrapper>().unwrap(),));
             match backend {

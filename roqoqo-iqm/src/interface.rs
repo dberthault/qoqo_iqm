@@ -72,7 +72,7 @@ pub struct IqmInstruction {
 ///
 /// * `circuit` - The [roqoqo::Circuit] that is converted
 /// * `device_number_qubits` - The number of qubits of the backend device. It is used to know how
-///    many qubits to measure with [roqoqo::operations::PragmaRepeatedMeasurement]
+///   many qubits to measure with [roqoqo::operations::PragmaRepeatedMeasurement]
 /// * `number_measurements_internal` - If set, the number of measurements that has been overwritten
 ///   in the backend
 /// * `circuit_index` - Index of the circuit in the batch, needed to assign a unique name to the circuit.
@@ -81,7 +81,7 @@ pub struct IqmInstruction {
 ///
 /// * `Ok(IqmCircuit, usize)` - Converted circuit and number of measurements
 /// * `Err(RoqoqoBackendError::OperationNotInBackend)` - Error when [roqoqo::operations::Operation]
-///    can not be converted
+///   can not be converted
 pub fn call_circuit<'a>(
     circuit: impl Iterator<Item = &'a Operation>,
     device_number_qubits: usize,
