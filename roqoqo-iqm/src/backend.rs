@@ -136,6 +136,7 @@ pub struct IqmRunResult {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[allow(unused)]
 struct IqmRunStatus {
     status: Status,
     message: Option<String>,
@@ -143,6 +144,7 @@ struct IqmRunStatus {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[allow(unused)]
 struct Token {
     pid: u64,
     timestamp: String,
