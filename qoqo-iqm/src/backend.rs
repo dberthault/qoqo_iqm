@@ -421,6 +421,7 @@ impl BackendWrapper {
     }
 
     /// Set the replacement mode for virtual Z measurements.
+    ///
     /// The accepted values are `none`, `replace_with_final_zgates`, and
     /// `replace_without_final_zgates`.
     ///
