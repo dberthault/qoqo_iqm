@@ -546,7 +546,7 @@ pub fn virtual_z_replacement_circuit(
                     new_circuit += multi_qubit_op;
                 }
                 _ => {
-                    return Err(IqmBackendError::InvalidCircuit { msg: 
+                    return Err(IqmBackendError::InvalidCircuit { msg:
                             format!(
                             "condition: all multi qubit gates are diagonal when virtualZ replacement is used.\ngate: {}",
                             multi_qubit_op.hqslang(),
@@ -577,7 +577,6 @@ pub fn virtual_z_replacement_circuit(
                                 )?;
                                 rotation_map = r_map.expect("Qonvert bug: Unexpectedly did not obtain rotation map from virtual rotate z gate optimisation.");
                                 new_circuit += new_inner_circuit;
-                            
                             }
                         }
                         CalculatorFloat::Str(_) => {
@@ -589,10 +588,8 @@ pub fn virtual_z_replacement_circuit(
                             rotation_map = HashMap::new();
                             let (new_inner_circuit, _) =
                                 virtual_z_replacement_circuit(inner_op.circuit(), None, true)?;
-                            new_circuit += PragmaLoop::new(
-                                inner_op.repetitions().clone(),
-                                new_inner_circuit,
-                            );
+                            new_circuit +=
+                                PragmaLoop::new(inner_op.repetitions().clone(), new_inner_circuit);
                         }
                     }
                 }
