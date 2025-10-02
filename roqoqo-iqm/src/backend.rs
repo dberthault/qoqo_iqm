@@ -223,7 +223,7 @@ pub struct Backend {
     access_token: String,
     /// Number of measurements
     pub number_measurements_internal: Option<usize>,
-    /// wether to use virtual Z replacement or not and how
+    /// Whether to use virtual Z replacement or not (and how to use it)
     pub virtual_z_replacement: VirtualZReplacementMode,
 }
 

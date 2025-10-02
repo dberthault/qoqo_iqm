@@ -421,13 +421,14 @@ impl BackendWrapper {
     }
 
     /// Set the replacement mode for virtual Z measurements.
-    /// The accepted values are `none`, `replace_with_final_zgates`, and `replace_without_final_zgates`.
+    /// The accepted values are `none`, `replace_with_final_zgates`, and
+    /// `replace_without_final_zgates`.
     ///
     /// Args:
     ///     virtual_z_replacement (str): The replacement mode for virtual Z measurements.
     ///
     /// Raises:
-    ///     PyValueError: If the provided replacement mode is not recognized.
+    ///     PyValueError: The provided replacement mode is not recognized.
     pub fn set_virtual_z_replacement(&mut self, virtual_z_replacement: String) -> PyResult<()> {
         self.internal.set_virtual_z_replacement(
             VirtualZReplacementMode::from_str(virtual_z_replacement.as_str())
