@@ -658,8 +658,6 @@ fn test_special_ops_variable_loop() {
             circuit_transformed_result.get("ro_trafo").unwrap()[0].clone();
         assert_eq!(final_statevector.len(), final_statevector_trafo.len());
 
-        // let final_array: Array1<Complex64> = Array1::from_iter(final_statevector.iter().cloned());
-        // let final_array_trafo: Array1<Complex64> = Array1::from_iter(final_statevector_trafo.iter().cloned());
         let (direct_val, transformed_val) = final_statevector
             .iter()
             .zip(final_statevector_trafo.iter())
@@ -734,8 +732,6 @@ fn test_special_ops() {
             circuit_transformed_result.get("ro_trafo").unwrap()[0].clone();
         assert_eq!(final_statevector.len(), final_statevector_trafo.len());
 
-        // let final_array: Array1<Complex64> = Array1::from_iter(final_statevector.iter().cloned());
-        // let final_array_trafo: Array1<Complex64> = Array1::from_iter(final_statevector_trafo.iter().cloned());
         let (direct_val, transformed_val) = final_statevector
             .iter()
             .zip(final_statevector_trafo.iter())
@@ -799,8 +795,6 @@ fn test_random_circuits(seed: u64) {
             circuit_transformed_result.get("ro_trafo").unwrap()[0].clone();
         assert_eq!(final_statevector.len(), final_statevector_trafo.len());
 
-        // let final_array: Array1<Complex64> = Array1::from_iter(final_statevector.iter().cloned());
-        // let final_array_trafo: Array1<Complex64> = Array1::from_iter(final_statevector_trafo.iter().cloned());
         let (direct_val, transformed_val) = final_statevector
             .iter()
             .zip(final_statevector_trafo.iter())

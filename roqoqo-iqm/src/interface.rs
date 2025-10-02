@@ -557,7 +557,7 @@ pub fn virtual_z_replacement_circuit(
         } else {
             match op {
                 Operation::MeasureQubit(inner_op) => {
-                    // Resetting phase change, because Measuremnt in Z direction absorbs Z-phase
+                    // Resetting phase change, because Measurement in Z direction absorbs Z-phase
                     if let Some(phase_value) = rotation_map.get_mut(inner_op.qubit()) {
                         *phase_value = 0.0.into();
                     }
@@ -594,7 +594,7 @@ pub fn virtual_z_replacement_circuit(
                     }
                 }
                 Operation::PragmaActiveReset(inner_op) => {
-                    // Resetting phase change, because Measuremnt in Z direction absorbs Z-phase
+                    // Resetting phase change, because Measurement in Z direction absorbs Z-phase
                     if let Some(phase_value) = rotation_map.get_mut(inner_op.qubit()) {
                         *phase_value = 0.0.into();
                     }
@@ -616,7 +616,7 @@ pub fn virtual_z_replacement_circuit(
                     );
                 }
                 Operation::PragmaRepeatedMeasurement(inner_op) => {
-                    // Resetting phase change, because Measuremnt in Z direction absorbs Z-phase
+                    // Resetting phase change, because Measurement in Z direction absorbs Z-phase
                     rotation_map = HashMap::new();
                     new_circuit += inner_op.clone();
                 }
