@@ -11,7 +11,9 @@
 // limitations under the License.
 
 use crate::devices::IqmDevice;
-use crate::interface::{call_circuit, IqmCircuit, MeasuredQubitsMap};
+use crate::interface::{
+    call_circuit, virtual_z_replacement_circuit, IqmCircuit, MeasuredQubitsMap,
+};
 use crate::IqmBackendError;
 
 use reqwest::blocking::Response;
@@ -24,6 +26,8 @@ use roqoqo::{Circuit, RoqoqoBackendError};
 use std::collections::{HashMap, HashSet};
 use std::env::var;
 use std::error::Error;
+use std::fmt::Display;
+use std::str::FromStr;
 use std::time::{Duration, Instant};
 use std::{fmt, thread};
 
@@ -166,6 +170,49 @@ impl fmt::Display for TokenError {
     }
 }
 
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+/// Mode for virtual Z replacement in IQM circuits.
+pub enum VirtualZReplacementMode {
+    #[serde(rename = "none")]
+    /// No virtual Z replacement.
+    NoReplacement,
+    /// Replace and final Z gates at the end of the circuit.
+    ReplaceWithFinalZGates,
+    /// Replace without final Z gates at the end of the circuit.
+    ReplaceWithoutFinalZGates,
+}
+
+impl FromStr for VirtualZReplacementMode {
+    type Err = IqmBackendError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "none" | "" => Ok(VirtualZReplacementMode::NoReplacement),
+            "replace_with_final_zgates" | "true" => {
+                Ok(VirtualZReplacementMode::ReplaceWithFinalZGates)
+            }
+            "replace_without_final_zgates" | "false" => {
+                Ok(VirtualZReplacementMode::ReplaceWithoutFinalZGates)
+            }
+            _ => Err(IqmBackendError::RoqoqoBackendError(
+                RoqoqoBackendError::GenericError {
+                    msg: format!("Invalid VirtualZReplacementMode: {}", s),
+                },
+            )),
+        }
+    }
+}
+
+impl Display for VirtualZReplacementMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            VirtualZReplacementMode::NoReplacement => "none",
+            VirtualZReplacementMode::ReplaceWithFinalZGates => "replace_with_final_z_gates",
+            VirtualZReplacementMode::ReplaceWithoutFinalZGates => "replace_without_final_z_gates",
+        };
+        f.write_str(s)
+    }
+}
 /// IQM backend
 /// Provides functions to run circuits and measurements on IQM devices.
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -176,6 +223,8 @@ pub struct Backend {
     access_token: String,
     /// Number of measurements
     pub number_measurements_internal: Option<usize>,
+    /// wether to use virtual Z replacement or not and how
+    pub virtual_z_replacement: VirtualZReplacementMode,
 }
 
 impl Backend {
@@ -211,6 +260,7 @@ impl Backend {
             device,
             access_token: access_token_internal,
             number_measurements_internal: None,
+            virtual_z_replacement: VirtualZReplacementMode::NoReplacement,
         })
     }
 
@@ -224,6 +274,15 @@ impl Backend {
         self.number_measurements_internal = Some(number_measurements)
     }
 
+    /// Set the virtual Z replacement mode for the backend.
+    pub fn set_virtual_z_replacement(&mut self, mode: VirtualZReplacementMode) {
+        self.virtual_z_replacement = mode;
+    }
+
+    /// Get the virtual Z replacement mode of the backend.
+    pub fn virtual_z_replacement(&self) -> VirtualZReplacementMode {
+        self.virtual_z_replacement.clone()
+    }
     /// Check that the device's connectivity is respected.
     ///
     /// # Arguments
@@ -598,6 +657,15 @@ impl Backend {
         let mut number_measurements_set = HashSet::new();
 
         for (circuit_index, circuit) in circuit_batch.iter().enumerate() {
+            let circuit = match self.virtual_z_replacement {
+                VirtualZReplacementMode::NoReplacement => circuit,
+                VirtualZReplacementMode::ReplaceWithFinalZGates => {
+                    &virtual_z_replacement_circuit(circuit, None, true)?.0
+                }
+                VirtualZReplacementMode::ReplaceWithoutFinalZGates => {
+                    &virtual_z_replacement_circuit(circuit, None, false)?.0
+                }
+            };
             let (iqm_circuit, number_measurements) = call_circuit(
                 circuit.iter(),
                 self.device.number_qubits(),

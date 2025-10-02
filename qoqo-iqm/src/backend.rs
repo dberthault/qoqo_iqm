@@ -19,9 +19,10 @@ use qoqo::{convert_into_circuit, CircuitWrapper};
 use roqoqo::prelude::*;
 use roqoqo::registers::Registers;
 use roqoqo::Circuit;
-use roqoqo_iqm::{results_to_registers, Backend, IqmDevice};
+use roqoqo_iqm::{results_to_registers, Backend, IqmDevice, VirtualZReplacementMode};
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
 /// IQM backend
 ///
@@ -417,6 +418,31 @@ impl BackendWrapper {
                     err
                 ))
             })
+    }
+
+    /// Set the replacement mode for virtual Z measurements.
+    /// The accepted values are `none`, `replace_with_final_zgates`, and `replace_without_final_zgates`.
+    ///
+    /// Args:
+    ///     virtual_z_replacement (str): The replacement mode for virtual Z measurements.
+    ///
+    /// Raises:
+    ///     PyValueError: If the provided replacement mode is not recognized.
+    pub fn set_virtual_z_replacement(&mut self, virtual_z_replacement: String) -> PyResult<()> {
+        self.internal.set_virtual_z_replacement(
+            VirtualZReplacementMode::from_str(virtual_z_replacement.as_str())
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+        );
+        Ok(())
+    }
+
+    /// Get the replacement mode for virtual Z replacement.
+    ///
+    /// Returns:
+    ///     str: The replacement mode for virtual Z measurements.
+    pub fn get_virtual_z_replacement(&self) -> PyResult<String> {
+        let virtual_z_replacement = self.internal.virtual_z_replacement();
+        Ok(virtual_z_replacement.to_string())
     }
 }
 

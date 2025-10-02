@@ -11,6 +11,7 @@
 // limitations under the License.
 
 use itertools::Itertools;
+use roqoqo::Circuit;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::f64::consts::PI;
@@ -409,4 +410,276 @@ fn _convert_all_qubit_names(number_qubits: usize) -> Vec<String> {
         qubit_vec.push(format!("QB{}", i))
     }
     qubit_vec
+}
+
+/// Applies virtual Z gate optimization.
+///
+/// On platforms where the RotateXY gate is available and the
+/// natural two-qubit gate is diagonal in the Z-basis,
+/// RotateZ gates can be replaced by virtual changes (rotations)
+/// of the qubit basis in the XY-Plane. This is also referred to as
+/// VirtualRotateZ gates optimization.
+///
+/// # Arguments
+///
+/// * `input` - The Circuit that is optimized.
+///
+/// # Returns
+///
+/// * `Ok(Circuit)` - Converted circuit when input was a Circuit.
+/// * `Err(IqmBackendError)` - Optimization failed.
+pub fn virtual_z_replacement_circuit(
+    circuit: &Circuit,
+    rotation_map: Option<HashMap<usize, CalculatorFloat>>,
+    apply_final_rotz: bool,
+) -> Result<(Circuit, Option<HashMap<usize, CalculatorFloat>>), IqmBackendError> {
+    let mut new_circuit = Circuit::new();
+    let mut rotation_map = rotation_map.unwrap_or_default();
+
+    for op in circuit.iter() {
+        if let Ok(two_qubit_op) = TwoQubitGateOperation::try_from(op) {
+            match two_qubit_op {
+                TwoQubitGateOperation::ControlledPhaseShift(_) => new_circuit += two_qubit_op,
+                TwoQubitGateOperation::ControlledPauliZ(_) => new_circuit += two_qubit_op,
+                TwoQubitGateOperation::PhaseShiftedControlledZ(_) => new_circuit += two_qubit_op,
+                TwoQubitGateOperation::PhaseShiftedControlledPhase(_) => {
+                    new_circuit += two_qubit_op
+                }
+                _ => {
+                    return Err(IqmBackendError::InvalidCircuit {
+                        msg: format!(
+                            "condition: all two qubit gates are diagonal when virtualZ replacement is used.\ngate: {}",
+                            two_qubit_op.hqslang(),
+                        ),
+                    })
+                }
+            }
+        } else if let Ok(single_qubit_op) = SingleQubitGateOperation::try_from(op) {
+            match single_qubit_op {
+                SingleQubitGateOperation::RotateZ(inner_op) => {
+                    update_phase_map(&mut rotation_map, inner_op.qubit(), inner_op.theta())
+                }
+                SingleQubitGateOperation::RotateX(inner_op) => {
+                    add_rotxy(
+                        &rotation_map,
+                        inner_op.qubit(),
+                        &mut new_circuit,
+                        inner_op.theta().clone(),
+                        CalculatorFloat::ZERO,
+                    );
+                }
+                SingleQubitGateOperation::RotateY(inner_op) => {
+                    add_rotxy(
+                        &rotation_map,
+                        inner_op.qubit(),
+                        &mut new_circuit,
+                        inner_op.theta().clone(),
+                        CalculatorFloat::FRAC_PI_2,
+                    );
+                }
+                SingleQubitGateOperation::PauliX(inner_op) => {
+                    add_rotxy(
+                        &rotation_map,
+                        inner_op.qubit(),
+                        &mut new_circuit,
+                        CalculatorFloat::PI,
+                        CalculatorFloat::ZERO,
+                    );
+                }
+                SingleQubitGateOperation::PauliY(inner_op) => {
+                    add_rotxy(
+                        &rotation_map,
+                        inner_op.qubit(),
+                        &mut new_circuit,
+                        CalculatorFloat::PI,
+                        CalculatorFloat::FRAC_PI_2,
+                    );
+                }
+                SingleQubitGateOperation::PauliZ(inner_op) => {
+                    update_phase_map(&mut rotation_map, inner_op.qubit(), &CalculatorFloat::PI)
+                }
+                SingleQubitGateOperation::SqrtPauliX(inner_op) => {
+                    add_rotxy(
+                        &rotation_map,
+                        inner_op.qubit(),
+                        &mut new_circuit,
+                        CalculatorFloat::FRAC_PI_2,
+                        CalculatorFloat::ZERO,
+                    );
+                }
+                SingleQubitGateOperation::InvSqrtPauliX(inner_op) => {
+                    add_rotxy(
+                        &rotation_map,
+                        inner_op.qubit(),
+                        &mut new_circuit,
+                        -CalculatorFloat::FRAC_PI_2,
+                        CalculatorFloat::ZERO,
+                    );
+                }
+                SingleQubitGateOperation::PhaseShiftState1(inner_op) => {
+                    update_phase_map(&mut rotation_map, inner_op.qubit(), inner_op.theta())
+                }
+                SingleQubitGateOperation::PhaseShiftState0(inner_op) => update_phase_map(
+                    &mut rotation_map,
+                    inner_op.qubit(),
+                    &(inner_op.theta() * -1),
+                ),
+                SingleQubitGateOperation::RotateXY(inner_op) => {
+                    add_rotxy(
+                        &rotation_map,
+                        inner_op.qubit(),
+                        &mut new_circuit,
+                        inner_op.theta().clone(),
+                        inner_op.phi().clone(),
+                    );
+                }
+                _ => return Err(IqmBackendError::InvalidCircuit {
+                    msg: format!(
+                        "all single qubit gates are special cases or RotateZ or RotateXY when virtualZ replacement is used.\ngate: {}",
+                        single_qubit_op.hqslang(),
+                    ),
+                }),
+            }
+        } else if let Ok(multi_qubit_op) = MultiQubitGateOperation::try_from(op) {
+            match multi_qubit_op {
+                MultiQubitGateOperation::MultiQubitZZ(_) => {
+                    new_circuit += multi_qubit_op;
+                }
+                _ => {
+                    return Err(IqmBackendError::InvalidCircuit { msg: 
+                            format!(
+                            "condition: all multi qubit gates are diagonal when virtualZ replacement is used.\ngate: {}",
+                            multi_qubit_op.hqslang(),
+                        ),
+                    })
+                }
+            }
+        } else {
+            match op {
+                Operation::MeasureQubit(inner_op) => {
+                    // Resetting phase change, because Measuremnt in Z direction absorbs Z-phase
+                    if let Some(phase_value) = rotation_map.get_mut(inner_op.qubit()) {
+                        *phase_value = 0.0.into();
+                    }
+                    new_circuit += inner_op.clone();
+                }
+                Operation::PragmaLoop(inner_op) => {
+                    match inner_op.repetitions() {
+                        CalculatorFloat::Float(n) => {
+                            // For cases where the number of floats is fixed, the loop can be unrolled and
+                            // the full VirtualZ optimization can be applied
+                            let n = n.floor() as usize;
+                            for _ in 0..n {
+                                let (new_inner_circuit, r_map) = virtual_z_replacement_circuit(
+                                    inner_op.circuit(),
+                                    Some(rotation_map),
+                                    false,
+                                )?;
+                                rotation_map = r_map.expect("Qonvert bug: Unexpectedly did not obtain rotation map from virtual rotate z gate optimisation.");
+                                new_circuit += new_inner_circuit;
+                            
+                            }
+                        }
+                        CalculatorFloat::Str(_) => {
+                            // Undo all basis changes before entering loop. Because it is executed several times
+                            // It needs to start in normal basis
+                            for (key, val) in rotation_map.iter() {
+                                new_circuit += RotateZ::new(*key, -(val.clone()));
+                            }
+                            rotation_map = HashMap::new();
+                            let (new_inner_circuit, _) =
+                                virtual_z_replacement_circuit(inner_op.circuit(), None, true)?;
+                            new_circuit += PragmaLoop::new(
+                                inner_op.repetitions().clone(),
+                                new_inner_circuit,
+                            );
+                        }
+                    }
+                }
+                Operation::PragmaActiveReset(inner_op) => {
+                    // Resetting phase change, because Measuremnt in Z direction absorbs Z-phase
+                    if let Some(phase_value) = rotation_map.get_mut(inner_op.qubit()) {
+                        *phase_value = 0.0.into();
+                    }
+                    new_circuit += inner_op.clone();
+                }
+                Operation::PragmaConditional(inner_op) => {
+                    // Undo all basis changes before entering loop. Because it is executed several times
+                    // It needs to start in normal basis
+                    for (key, val) in rotation_map.iter() {
+                        new_circuit += RotateZ::new(*key, -(val.clone()));
+                    }
+                    rotation_map = HashMap::new();
+                    let (new_inner_circuit, _) =
+                        virtual_z_replacement_circuit(inner_op.circuit(), None, true)?;
+                    new_circuit += PragmaConditional::new(
+                        inner_op.condition_register().clone(),
+                        *inner_op.condition_index(),
+                        new_inner_circuit,
+                    );
+                }
+                Operation::PragmaRepeatedMeasurement(inner_op) => {
+                    // Resetting phase change, because Measuremnt in Z direction absorbs Z-phase
+                    rotation_map = HashMap::new();
+                    new_circuit += inner_op.clone();
+                }
+                Operation::PragmaGetStateVector(inner_op) => {
+                    for (key, val) in rotation_map.iter() {
+                        new_circuit += RotateZ::new(*key, -(val.clone()));
+                    }
+                    rotation_map = HashMap::new();
+                    new_circuit += inner_op.clone();
+                }
+                Operation::PragmaGetDensityMatrix(inner_op) => {
+                    for (key, val) in rotation_map.iter() {
+                        new_circuit += RotateZ::new(*key, -(val.clone()));
+                    }
+                    rotation_map = HashMap::new();
+                    new_circuit += inner_op.clone();
+                }
+                _ => {
+                    new_circuit += op.clone();
+                }
+            }
+        }
+    }
+
+    if apply_final_rotz {
+        for (key, val) in rotation_map.iter() {
+            new_circuit += RotateZ::new(*key, -(val.clone()));
+        }
+    }
+
+    let final_hash_map = if apply_final_rotz {
+        None
+    } else {
+        Some(rotation_map)
+    };
+    Ok((new_circuit, final_hash_map))
+}
+
+#[inline]
+fn add_rotxy(
+    rotation_map: &HashMap<usize, CalculatorFloat>,
+    qubit: &usize,
+    new_circuit: &mut Circuit,
+    theta: CalculatorFloat,
+    offset_rotation: CalculatorFloat,
+) {
+    let additional_rotation = rotation_map.get(qubit).unwrap_or(&CalculatorFloat::ZERO);
+    *new_circuit += RotateXY::new(*qubit, theta, offset_rotation + additional_rotation);
+}
+
+#[inline]
+fn update_phase_map(
+    map: &mut HashMap<usize, CalculatorFloat>,
+    qubit: &usize,
+    val: &CalculatorFloat,
+) {
+    match map.get_mut(qubit) {
+        Some(v) => *v = v.clone() - val.clone(),
+        None => {
+            map.insert(*qubit, -val.clone());
+        }
+    }
 }
