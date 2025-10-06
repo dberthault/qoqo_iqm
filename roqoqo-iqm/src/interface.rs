@@ -575,7 +575,7 @@ pub fn virtual_z_replacement_circuit(
                                     Some(rotation_map),
                                     false,
                                 )?;
-                                rotation_map = r_map.expect("Qonvert bug: Unexpectedly did not obtain rotation map from virtual rotate z gate optimisation.");
+                                rotation_map = r_map.expect("Unexpectedly did not obtain rotation map from virtual rotate z gate optimisation.");
                                 new_circuit += new_inner_circuit;
                             }
                         }
