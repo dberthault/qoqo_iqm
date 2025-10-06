@@ -14,7 +14,6 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyByteArray;
 
-use bincode::{deserialize, serialize};
 use roqoqo::devices::Device;
 use roqoqo_iqm::devices::ResonatorFreeDevice;
 
@@ -92,10 +91,12 @@ impl ResonatorFreeDeviceWrapper {
     /// Raises:
     ///     ValueError: Cannot serialize ResonatorFreeDevice to bytes.
     pub fn to_bincode(&self) -> PyResult<Py<PyByteArray>> {
-        let serialized = serialize(&self.internal)
-            .map_err(|_| PyValueError::new_err("Cannot serialize ResonatorFreeDevice to bytes"))?;
+        let serialized = bincode::serde::encode_to_vec(&self.internal, bincode::config::legacy())
+            .map_err(|_| {
+            PyValueError::new_err("Cannot serialize ResonatorFreeDevice to bytes")
+        })?;
         let b: Py<PyByteArray> = Python::with_gil(|py| -> Py<PyByteArray> {
-            PyByteArray::new_bound(py, &serialized[..]).into()
+            PyByteArray::new(py, &serialized[..]).into()
         });
         Ok(b)
     }
@@ -119,9 +120,11 @@ impl ResonatorFreeDeviceWrapper {
             .map_err(|_| PyTypeError::new_err("Input cannot be converted to byte array"))?;
 
         Ok(ResonatorFreeDeviceWrapper {
-            internal: deserialize(&bytes[..]).map_err(|_| {
-                PyValueError::new_err("Input cannot be deserialized to ResonatorFreeDevice")
-            })?,
+            internal: bincode::serde::decode_from_slice(&bytes[..], bincode::config::legacy())
+                .map_err(|_| {
+                    PyValueError::new_err("Input cannot be deserialized to ResonatorFreeDevice")
+                })?
+                .0,
         })
     }
 
