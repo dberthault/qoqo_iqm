@@ -19,10 +19,10 @@ use qoqo::{convert_into_circuit, CircuitWrapper};
 use roqoqo::prelude::*;
 use roqoqo::registers::Registers;
 use roqoqo::Circuit;
-use roqoqo_iqm::{results_to_registers, Backend, IqmDevice};
+use roqoqo_iqm::{results_to_registers, Backend, IqmDevice, VirtualZReplacementMode};
 
-use bincode::{deserialize, serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 /// IQM backend
 ///
@@ -64,12 +64,14 @@ impl BackendWrapper {
                         .to_string(),
                 )
             })?;
-            deserialize(&bytes[..]).map_err(|err| {
-                PyTypeError::new_err(format!(
+            bincode::serde::decode_from_slice(&bytes[..], bincode::config::legacy())
+                .map_err(|err| {
+                    PyTypeError::new_err(format!(
                     "Python object cannot be converted to IQM Backend: Deserialization failed: {}",
                     err
                 ))
-            })
+                })
+                .map(|(deserialized, _)| deserialized)
         }
     }
 }
@@ -90,13 +92,11 @@ impl BackendWrapper {
     #[new]
     pub fn new(device: &Bound<PyAny>, access_token: Option<String>) -> PyResult<Self> {
         let iqm_device: IqmDevice;
-        let device_pyany = device.as_gil_ref();
-        if let Ok(dev) = DenebDeviceWrapper::from_pyany(&device_pyany.as_borrowed()) {
+        if let Ok(dev) = DenebDeviceWrapper::from_pyany(device) {
             iqm_device = IqmDevice::from(dev);
-        } else if let Ok(dev) = GarnetDeviceWrapper::from_pyany(&device_pyany.as_borrowed()) {
+        } else if let Ok(dev) = GarnetDeviceWrapper::from_pyany(device) {
             iqm_device = IqmDevice::from(dev);
-        } else if let Ok(dev) = ResonatorFreeDeviceWrapper::from_pyany(&device_pyany.as_borrowed())
-        {
+        } else if let Ok(dev) = ResonatorFreeDeviceWrapper::from_pyany(device) {
             iqm_device = IqmDevice::from(dev);
         } else {
             return Err(PyRuntimeError::new_err(
@@ -147,10 +147,10 @@ impl BackendWrapper {
     /// Raises:
     ///     ValueError: Cannot serialize Backend to bytes.
     pub fn to_bincode(&self) -> PyResult<Py<PyByteArray>> {
-        let serialized = serialize(&self.internal)
+        let serialized = bincode::serde::encode_to_vec(&self.internal, bincode::config::legacy())
             .map_err(|_| PyValueError::new_err("Cannot serialize Backend to bytes"))?;
         let b: Py<PyByteArray> = Python::with_gil(|py| -> Py<PyByteArray> {
-            PyByteArray::new_bound(py, &serialized[..]).into()
+            PyByteArray::new(py, &serialized[..]).into()
         });
         Ok(b)
     }
@@ -173,8 +173,9 @@ impl BackendWrapper {
             .map_err(|_| PyTypeError::new_err("Input cannot be converted to byte array"))?;
 
         Ok(BackendWrapper {
-            internal: deserialize(&bytes[..])
-                .map_err(|_| PyValueError::new_err("Input cannot be deserialized to Backend"))?,
+            internal: bincode::serde::decode_from_slice(&bytes[..], bincode::config::legacy())
+                .map_err(|_| PyValueError::new_err("Input cannot be deserialized to Backend"))?
+                .0,
         })
     }
 
@@ -418,6 +419,33 @@ impl BackendWrapper {
                 ))
             })
     }
+
+    /// Set the replacement mode for virtual Z measurements.
+    ///
+    /// The accepted values are `none`, `replace_with_final_zgates`, and
+    /// `replace_without_final_zgates`.
+    ///
+    /// Args:
+    ///     virtual_z_replacement (str): The replacement mode for virtual Z measurements.
+    ///
+    /// Raises:
+    ///     PyValueError: The provided replacement mode is not recognized.
+    pub fn set_virtual_z_replacement(&mut self, virtual_z_replacement: String) -> PyResult<()> {
+        self.internal.set_virtual_z_replacement(
+            VirtualZReplacementMode::from_str(virtual_z_replacement.as_str())
+                .map_err(|e| PyValueError::new_err(e.to_string()))?,
+        );
+        Ok(())
+    }
+
+    /// Get the replacement mode for virtual Z replacement.
+    ///
+    /// Returns:
+    ///     str: The replacement mode for virtual Z measurements.
+    pub fn get_virtual_z_replacement(&self) -> PyResult<String> {
+        let virtual_z_replacement = self.internal.virtual_z_replacement();
+        Ok(virtual_z_replacement.to_string())
+    }
 }
 
 /// Helper function to construct the list of circuits from a measurement by appending each circuit
@@ -433,7 +461,7 @@ fn get_circuit_list_from_measurement(measurement: &Bound<PyAny>) -> PyResult<Vec
                 err
             ))
         })?
-        .extract::<Option<&PyAny>>()
+        .extract::<Option<Bound<PyAny>>>()
         .map_err(|err| {
             PyTypeError::new_err(format!(
                 "Cannot extract constant circuit from measurement: {:?}",
@@ -451,26 +479,24 @@ fn get_circuit_list_from_measurement(measurement: &Bound<PyAny>) -> PyResult<Vec
         None => Circuit::new(),
     };
 
-    let circuit_list = measurement
-        .call_method0("circuits")
+    let get_circuit_list = measurement.call_method0("circuits").map_err(|err| {
+        PyTypeError::new_err(format!(
+            "Cannot extract circuit list from measurement: {:?}",
+            err
+        ))
+    })?;
+    let circuit_list = get_circuit_list
+        .extract::<Vec<Bound<PyAny>>>()
         .map_err(|err| {
             PyTypeError::new_err(format!(
-                "Cannot extract circuit list from measurement: {:?}",
-                err
-            ))
-        })?
-        .extract::<Vec<&PyAny>>()
-        .map_err(|err| {
-            PyTypeError::new_err(format!(
-                "Cannot extract circuit list from measurement: {:?}",
-                err
+                "Cannot extract circuit list from measurement {err:?}"
             ))
         })?;
 
     for c in circuit_list {
         run_circuits.push(
             constant_circuit.clone()
-                + convert_into_circuit(&c.as_borrowed()).map_err(|err| {
+                + convert_into_circuit(&c).map_err(|err| {
                     PyTypeError::new_err(format!(
                         "Cannot extract circuit of circuit list from measurement: {:?}",
                         err

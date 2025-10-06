@@ -87,7 +87,9 @@ pub enum IqmBackendError {
 }
 
 mod interface;
-pub use interface::{call_circuit, call_operation, IqmCircuit, IqmInstruction};
+pub use interface::{
+    call_circuit, call_operation, virtual_z_replacement_circuit, IqmCircuit, IqmInstruction,
+};
 
 mod backend;
 pub use backend::*;

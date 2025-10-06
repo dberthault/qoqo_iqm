@@ -11,7 +11,9 @@
 // limitations under the License.
 
 use crate::devices::IqmDevice;
-use crate::interface::{call_circuit, IqmCircuit, MeasuredQubitsMap};
+use crate::interface::{
+    call_circuit, virtual_z_replacement_circuit, IqmCircuit, MeasuredQubitsMap,
+};
 use crate::IqmBackendError;
 
 use reqwest::blocking::Response;
@@ -24,6 +26,8 @@ use roqoqo::{Circuit, RoqoqoBackendError};
 use std::collections::{HashMap, HashSet};
 use std::env::var;
 use std::error::Error;
+use std::fmt::Display;
+use std::str::FromStr;
 use std::time::{Duration, Instant};
 use std::{fmt, thread};
 
@@ -136,6 +140,7 @@ pub struct IqmRunResult {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[allow(unused)]
 struct IqmRunStatus {
     status: Status,
     message: Option<String>,
@@ -143,6 +148,7 @@ struct IqmRunStatus {
 }
 
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+#[allow(unused)]
 struct Token {
     pid: u64,
     timestamp: String,
@@ -164,6 +170,49 @@ impl fmt::Display for TokenError {
     }
 }
 
+#[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
+/// Mode for virtual Z replacement in IQM circuits.
+pub enum VirtualZReplacementMode {
+    #[serde(rename = "none")]
+    /// No virtual Z replacement.
+    NoReplacement,
+    /// Replace and final Z gates at the end of the circuit.
+    ReplaceWithFinalZGates,
+    /// Replace without final Z gates at the end of the circuit.
+    ReplaceWithoutFinalZGates,
+}
+
+impl FromStr for VirtualZReplacementMode {
+    type Err = IqmBackendError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "none" | "" => Ok(VirtualZReplacementMode::NoReplacement),
+            "replace_with_final_zgates" | "true" => {
+                Ok(VirtualZReplacementMode::ReplaceWithFinalZGates)
+            }
+            "replace_without_final_zgates" | "false" => {
+                Ok(VirtualZReplacementMode::ReplaceWithoutFinalZGates)
+            }
+            _ => Err(IqmBackendError::RoqoqoBackendError(
+                RoqoqoBackendError::GenericError {
+                    msg: format!("Invalid VirtualZReplacementMode: {}", s),
+                },
+            )),
+        }
+    }
+}
+
+impl Display for VirtualZReplacementMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            VirtualZReplacementMode::NoReplacement => "none",
+            VirtualZReplacementMode::ReplaceWithFinalZGates => "replace_with_final_z_gates",
+            VirtualZReplacementMode::ReplaceWithoutFinalZGates => "replace_without_final_z_gates",
+        };
+        f.write_str(s)
+    }
+}
 /// IQM backend
 /// Provides functions to run circuits and measurements on IQM devices.
 #[derive(Eq, PartialEq, Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +223,8 @@ pub struct Backend {
     access_token: String,
     /// Number of measurements
     pub number_measurements_internal: Option<usize>,
+    /// Whether to use virtual Z replacement or not (and how to use it)
+    pub virtual_z_replacement: VirtualZReplacementMode,
 }
 
 impl Backend {
@@ -183,8 +234,8 @@ impl Backend {
     ///
     /// * `device` - The IQM device the Backend uses to execute operations and circuits.
     /// * `access_token` - An access_token is required to access IQM hardware and simulators. The
-    ///                    access_token can either be passed as an argument, or if the argument is set to None will be
-    ///                    read from the environmental variable `IQM_TOKEN`.
+    ///   access_token can either be passed as an argument, or if the argument is set to None will be
+    ///   read from the environmental variable `IQM_TOKEN`.
     ///
     /// # Returns
     ///
@@ -209,6 +260,7 @@ impl Backend {
             device,
             access_token: access_token_internal,
             number_measurements_internal: None,
+            virtual_z_replacement: VirtualZReplacementMode::NoReplacement,
         })
     }
 
@@ -222,6 +274,15 @@ impl Backend {
         self.number_measurements_internal = Some(number_measurements)
     }
 
+    /// Set the virtual Z replacement mode for the backend.
+    pub fn set_virtual_z_replacement(&mut self, mode: VirtualZReplacementMode) {
+        self.virtual_z_replacement = mode;
+    }
+
+    /// Get the virtual Z replacement mode of the backend.
+    pub fn virtual_z_replacement(&self) -> VirtualZReplacementMode {
+        self.virtual_z_replacement.clone()
+    }
     /// Check that the device's connectivity is respected.
     ///
     /// # Arguments
@@ -596,6 +657,15 @@ impl Backend {
         let mut number_measurements_set = HashSet::new();
 
         for (circuit_index, circuit) in circuit_batch.iter().enumerate() {
+            let circuit = match self.virtual_z_replacement {
+                VirtualZReplacementMode::NoReplacement => circuit,
+                VirtualZReplacementMode::ReplaceWithFinalZGates => {
+                    &virtual_z_replacement_circuit(circuit, None, true)?.0
+                }
+                VirtualZReplacementMode::ReplaceWithoutFinalZGates => {
+                    &virtual_z_replacement_circuit(circuit, None, false)?.0
+                }
+            };
             let (iqm_circuit, number_measurements) = call_circuit(
                 circuit.iter(),
                 self.device.number_qubits(),
@@ -693,6 +763,7 @@ impl EvaluatingBackend for Backend {
             })?;
         self.run_circuit_iterator(circuit.iter())
     }
+
     fn run_circuit_iterator<'a>(
         &self,
         circuit: impl Iterator<Item = &'a Operation>,
@@ -702,6 +773,60 @@ impl EvaluatingBackend for Backend {
             .map_err(|err| RoqoqoBackendError::GenericError {
                 msg: err.to_string(),
             })
+    }
+
+    fn run_measurement_registers<T>(&self, measurement: &T) -> RegisterResult
+    where
+        T: roqoqo::prelude::Measure,
+    {
+        let mut bit_registers: HashMap<String, BitOutputRegister> = HashMap::new();
+        let mut float_registers: HashMap<String, FloatOutputRegister> = HashMap::new();
+        let mut complex_registers: HashMap<String, ComplexOutputRegister> = HashMap::new();
+
+        for circuit in measurement.circuits() {
+            let mut new_circuit = match measurement.constant_circuit() {
+                Some(x) => x.clone() + circuit,
+                None => Circuit::new() + circuit,
+            };
+            match self.virtual_z_replacement {
+                VirtualZReplacementMode::NoReplacement => {}
+                VirtualZReplacementMode::ReplaceWithFinalZGates => {
+                    new_circuit = virtual_z_replacement_circuit(&new_circuit, None, true)
+                        .map_err(|e| RoqoqoBackendError::GenericError { msg: e.to_string() })?
+                        .0;
+                }
+                VirtualZReplacementMode::ReplaceWithoutFinalZGates => {
+                    new_circuit = virtual_z_replacement_circuit(&new_circuit, None, false)
+                        .map_err(|e| RoqoqoBackendError::GenericError { msg: e.to_string() })?
+                        .0;
+                }
+            }
+            let (tmp_bit_reg, tmp_float_reg, tmp_complex_reg) =
+                self.run_circuit_iterator(new_circuit.iter())?;
+
+            for (key, mut val) in tmp_bit_reg.into_iter() {
+                if let Some(x) = bit_registers.get_mut(&key) {
+                    x.append(&mut val);
+                } else {
+                    let _ = bit_registers.insert(key, val);
+                }
+            }
+            for (key, mut val) in tmp_float_reg.into_iter() {
+                if let Some(x) = float_registers.get_mut(&key) {
+                    x.append(&mut val);
+                } else {
+                    let _ = float_registers.insert(key, val);
+                }
+            }
+            for (key, mut val) in tmp_complex_reg.into_iter() {
+                if let Some(x) = complex_registers.get_mut(&key) {
+                    x.append(&mut val);
+                } else {
+                    let _ = complex_registers.insert(key, val);
+                }
+            }
+        }
+        Ok((bit_registers, float_registers, complex_registers))
     }
 }
 
