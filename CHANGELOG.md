@@ -4,6 +4,10 @@ This changelog tracks changes to the qoqo_iqm project starting at version 0.1.0.
 
 ## Not released
 
+## 0.11.1
+
+* Use Rust tls instead the openssl one's that were causing an error during deployments.
+
 ## 0.11.0
 
 * Updated minimum supported Python version to 3.10.
