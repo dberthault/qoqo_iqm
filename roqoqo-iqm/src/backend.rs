@@ -763,6 +763,7 @@ impl EvaluatingBackend for Backend {
             })?;
         self.run_circuit_iterator(circuit.iter())
     }
+
     fn run_circuit_iterator<'a>(
         &self,
         circuit: impl Iterator<Item = &'a Operation>,
@@ -772,6 +773,60 @@ impl EvaluatingBackend for Backend {
             .map_err(|err| RoqoqoBackendError::GenericError {
                 msg: err.to_string(),
             })
+    }
+
+    fn run_measurement_registers<T>(&self, measurement: &T) -> RegisterResult
+    where
+        T: roqoqo::prelude::Measure,
+    {
+        let mut bit_registers: HashMap<String, BitOutputRegister> = HashMap::new();
+        let mut float_registers: HashMap<String, FloatOutputRegister> = HashMap::new();
+        let mut complex_registers: HashMap<String, ComplexOutputRegister> = HashMap::new();
+
+        for circuit in measurement.circuits() {
+            let mut new_circuit = match measurement.constant_circuit() {
+                Some(x) => x.clone() + circuit,
+                None => Circuit::new() + circuit,
+            };
+            match self.virtual_z_replacement {
+                VirtualZReplacementMode::NoReplacement => {}
+                VirtualZReplacementMode::ReplaceWithFinalZGates => {
+                    new_circuit = virtual_z_replacement_circuit(&new_circuit, None, true)
+                        .map_err(|e| RoqoqoBackendError::GenericError { msg: e.to_string() })?
+                        .0;
+                }
+                VirtualZReplacementMode::ReplaceWithoutFinalZGates => {
+                    new_circuit = virtual_z_replacement_circuit(&new_circuit, None, false)
+                        .map_err(|e| RoqoqoBackendError::GenericError { msg: e.to_string() })?
+                        .0;
+                }
+            }
+            let (tmp_bit_reg, tmp_float_reg, tmp_complex_reg) =
+                self.run_circuit_iterator(new_circuit.iter())?;
+
+            for (key, mut val) in tmp_bit_reg.into_iter() {
+                if let Some(x) = bit_registers.get_mut(&key) {
+                    x.append(&mut val);
+                } else {
+                    let _ = bit_registers.insert(key, val);
+                }
+            }
+            for (key, mut val) in tmp_float_reg.into_iter() {
+                if let Some(x) = float_registers.get_mut(&key) {
+                    x.append(&mut val);
+                } else {
+                    let _ = float_registers.insert(key, val);
+                }
+            }
+            for (key, mut val) in tmp_complex_reg.into_iter() {
+                if let Some(x) = complex_registers.get_mut(&key) {
+                    x.append(&mut val);
+                } else {
+                    let _ = complex_registers.insert(key, val);
+                }
+            }
+        }
+        Ok((bit_registers, float_registers, complex_registers))
     }
 }
 
