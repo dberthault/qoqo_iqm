@@ -6,7 +6,7 @@ This changelog tracks changes to the qoqo_iqm project starting at version 0.1.0.
 
 ## 0.11.1
 
-* Use Rust tls instead the openssl one's that were causing an error during deployments.
+* Use Rust tls instead of the openssl one, as it was causing an error during deployments.
 
 ## 0.11.0
 
